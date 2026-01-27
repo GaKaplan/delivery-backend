@@ -4,12 +4,13 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Database connection URL from environment variables
-# Format: mysql+pymysql://user:password@host:port/database
-# For local testing, you can use a default, but Render will use the env var.
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "mysql+pymysql://root:@localhost/delivery_db"
-)
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+
+if SQLALCHEMY_DATABASE_URL:
+    print(f"DATABASE: Conectando a base de datos externa... {SQLALCHEMY_DATABASE_URL.split('@')[-1]}")
+else:
+    print("WARNING: No se encontró DATABASE_URL. Usando fallback local (localhost).")
+    SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:@localhost/delivery_db"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
