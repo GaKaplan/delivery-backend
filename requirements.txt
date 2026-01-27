@@ -7,3 +7,7 @@ requests
 networkx
 openpyxl
 gunicorn
+passlib[bcrypt]
+python-jose[cryptography]
+sqlalchemy
+pymysql

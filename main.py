@@ -1,13 +1,20 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from typing import List
 import shutil
 import os
 import json
+import models
+import schemas
+import auth
+import database
 from services.parser import parse_pdf
 from services.geocoder import geocode_addresses
 from services.optimizer import optimize_route
+
+# Create database tables
+models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI()
 
@@ -19,9 +26,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def startup_populate_db():
+    db = next(database.get_db())
+    # Create default admin if not exists
+    admin_user = db.query(models.User).filter(models.User.role == "admin").first()
+    if not admin_user:
+        hashed_pw = auth.get_password_hash("admin123")
+        new_admin = models.User(username="admin", hashed_password=hashed_pw, role="admin")
+        db.add(new_admin)
+        db.commit()
+
 @app.get("/")
 async def root():
     return {"status": "online", "message": "Delivery Route Optimizer API is running"}
+
+# --- AUTH ENDPOINTS ---
+
+@app.post("/api/auth/login", response_model=schemas.Token)
+def login(login_data: schemas.LoginRequest, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.username == login_data.username).first()
+    if not user or not auth.verify_password(login_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario o contraseña incorrectos",
+        )
+    
+    access_token = auth.create_access_token(data={"sub": user.username})
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "username": user.username,
+        "role": user.role
+    }
+
+# --- USER MANAGEMENT (ADMIN ONLY) ---
+
+@app.get("/api/users", response_model=List[schemas.User])
+def get_users(db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
+    return db.query(models.User).all()
+
+@app.post("/api/users", response_model=schemas.User)
+def create_user(user_data: schemas.UserCreate, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
+    db_user = db.query(models.User).filter(models.User.username == user_data.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="El usuario ya existe")
+    
+    hashed_pw = auth.get_password_hash(user_data.password)
+    new_user = models.User(
+        username=user_data.username,
+        hashed_password=hashed_pw,
+        role=user_data.role
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puedes borrarte a ti mismo")
+    
+    db.delete(user)
+    db.commit()
+    return {"message": "Usuario eliminado"}
 
 class Location(BaseModel):
     id: int
@@ -52,7 +124,8 @@ async def optimize_route_endpoint(
     excel_start_row: int = Form(1),
     excel_address_col: str = Form("A"),
     round_trip: bool = Form(False),
-    strategy: str = Form("nearest")
+    strategy: str = Form("nearest"),
+    current_user: models.User = Depends(auth.get_current_user)
 ):
     is_pdf = file.filename.lower().endswith('.pdf')
     is_excel = file.filename.lower().endswith(('.xlsx', '.xls'))
