@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+temp_*
+*.xlsx
+*.pdf
+!sample_delivery.xlsx
+!sample_delivery.pdf

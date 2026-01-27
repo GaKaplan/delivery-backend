@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+pdfplumber
+geopy
+requests
+networkx
+openpyxl
+gunicorn
