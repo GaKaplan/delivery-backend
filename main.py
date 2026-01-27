@@ -13,8 +13,14 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://infotechlatam.com",
+        "http://infotechlatam.com",
+        "https://www.infotechlatam.com",
+        "http://www.infotechlatam.com"
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
