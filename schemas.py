@@ -20,12 +20,14 @@ class UserRegister(BaseModel):
     phone: Optional[str] = None
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
     password: Optional[str] = None
     role: Optional[str] = None
     full_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[int] = None
+
 
 class User(UserBase):
     id: int
