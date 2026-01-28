@@ -18,15 +18,16 @@ class EmailService:
         return config_dict
 
     def send_verification_email(self, to_email: str, token: str, username: str):
-        smtp_host = self.config.get("smtp_host")
-        smtp_port = self.config.get("smtp_port")
-        smtp_user = self.config.get("smtp_user")
-        smtp_pass = self.config.get("smtp_password")
+        smtp_host = self.config.get("smtp_host", "").strip()
+        smtp_port = self.config.get("smtp_port", "587").strip()
+        smtp_user = self.config.get("smtp_user", "").strip()
+        smtp_pass = self.config.get("smtp_password", "").strip()
         smtp_tls = self.config.get("smtp_tls", "True").lower() == "true"
 
-        if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
-            logger.error("Configuración SMTP incompleta. No se pudo enviar el correo.")
-            return False
+        if not all([smtp_host, smtp_user, smtp_pass]):
+            msg = "Configuración SMTP incompleta (Faltan host, usuario o contraseña)."
+            logger.error(msg)
+            return False, msg
 
         # Build verification link (This should ideally come from another config but we'll use a relative path or a known public URL)
         # For now, let's assume the frontend will handle the verification route
@@ -67,10 +68,11 @@ class EmailService:
             server.send_message(msg)
             server.quit()
             logger.info(f"Email de verificación enviado a {to_email}")
-            return True
+            return True, None
         except Exception as e:
-            logger.error(f"Error al enviar email: {e}")
-            return False
+            error_msg = str(e)
+            logger.error(f"Error al enviar email: {error_msg}")
+            return False, error_msg
 
     @staticmethod
     def generate_token():

@@ -120,9 +120,13 @@ def register(user_data: schemas.UserRegister, db: Session = Depends(database.get
 
     # Send email asynchronously or catch errors
     email_service = EmailService(db)
-    email_sent = email_service.send_verification_email(new_user.email, verification_token, new_user.full_name or new_user.username)
+    email_sent, error_msg = email_service.send_verification_email(new_user.email, verification_token, new_user.full_name or new_user.username)
     
-    # We still return the user. Frontend will show success message.
+    if not email_sent:
+        print(f"SMTP ERROR durante registro: {error_msg}")
+        # We still return the user so they see the success screen, 
+        # but they might need to request a resend later if it failed here.
+    
     return new_user
 
 @app.get("/api/auth/verify-email")
@@ -150,12 +154,15 @@ def resend_verification(username: str, db: Session = Depends(database.get_db)):
     db.commit()
     
     email_service = EmailService(db)
-    email_sent = email_service.send_verification_email(user.email, token, user.full_name or user.username)
+    email_sent, error_msg = email_service.send_verification_email(user.email, token, user.full_name or user.username)
     
     if not email_sent:
-        raise HTTPException(status_code=500, detail="Error al enviar el correo. Contacte al administrador para revisar la configuración SMTP.")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al enviar el correo: {error_msg}. Verifique su configuración SMTP en el panel de administración."
+        )
         
-    return {"message": "Cerrar exitoso. Se ha enviado un nuevo enlace de verificación a tu correo."}
+    return {"message": "Éxito. Se ha enviado un nuevo enlace de verificación a tu correo."}
 
 # --- USER MANAGEMENT (ADMIN ONLY) ---
 
