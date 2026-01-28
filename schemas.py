@@ -8,6 +8,8 @@ class UserBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_active: int = 0  # 0=Pending, 1=Active
+    email_verified: bool = False
+    verification_token: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -45,3 +47,24 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+# Config Schemas (V3.1)
+class ConfigBase(BaseModel):
+    key: str
+    value: str
+    description: Optional[str] = None
+
+class ConfigCreate(ConfigBase):
+    pass
+
+class ConfigSchema(ConfigBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+class EmailConfigUpdate(BaseModel):
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password: Optional[str] = None
+    smtp_tls: bool = True

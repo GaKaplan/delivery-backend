@@ -28,12 +28,14 @@ def migrate():
         )
         cursor = conn.cursor()
         
-        # Columns to add
+        # Columns to add for V3.1
         columns = [
             ("full_name", "VARCHAR(100)"),
             ("email", "VARCHAR(100)"),
             ("phone", "VARCHAR(20)"),
-            ("is_active", "INT DEFAULT 0")
+            ("is_active", "INT DEFAULT 0"),
+            ("email_verified", "BOOLEAN DEFAULT FALSE"),
+            ("verification_token", "VARCHAR(100)")
         ]
         
         for col_name, col_type in columns:
@@ -47,8 +49,22 @@ def migrate():
                 else:
                     raise e
 
-        # Ensure existing admin is active
-        cursor.execute("UPDATE users SET is_active = 1 WHERE role = 'admin'")
+        # Create configurations table
+        print("Creando tabla configurations si no existe...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS configurations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                `key` VARCHAR(50) UNIQUE NOT NULL,
+                value VARCHAR(255) NOT NULL,
+                description VARCHAR(255),
+                INDEX ( `key` )
+            )
+        """)
+        print("Tabla configurations lista.")
+
+        # Ensure existing admin is active and verified
+        cursor.execute("UPDATE users SET is_active = 1, email_verified = 1 WHERE role = 'admin'")
+
         
         conn.commit()
         print("Migración completada exitosamente.")

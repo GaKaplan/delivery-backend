@@ -13,6 +13,8 @@ import database
 from services.parser import parse_pdf
 from services.geocoder import geocode_addresses
 from services.optimizer import optimize_route
+from services.email_service import EmailService
+
 
 # Create database tables
 models.Base.metadata.create_all(bind=database.engine)
@@ -73,6 +75,13 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(database.get_d
             detail="Tu cuenta está pendiente de activación por un administrador.",
         )
     
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu email aún no ha sido verificado. Por favor revisa tu bandeja de entrada o solicita un nuevo enlace.",
+        )
+
+    
     access_token = auth.create_access_token(data={"sub": user.username})
     return {
         "access_token": access_token, 
@@ -92,6 +101,8 @@ def register(user_data: schemas.UserRegister, db: Session = Depends(database.get
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
     hashed_pw = auth.get_password_hash(user_data.password)
+    verification_token = EmailService.generate_token()
+    
     new_user = models.User(
         username=user_data.username,
         hashed_password=hashed_pw,
@@ -99,12 +110,52 @@ def register(user_data: schemas.UserRegister, db: Session = Depends(database.get
         email=user_data.email,
         phone=user_data.phone,
         role="user",
-        is_active=0 # Pending approval
+        is_active=0, # Pending approval
+        email_verified=0,
+        verification_token=verification_token
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # Send email asynchronously or catch errors
+    email_service = EmailService(db)
+    email_sent = email_service.send_verification_email(new_user.email, verification_token, new_user.full_name or new_user.username)
+    
+    # We still return the user. Frontend will show success message.
     return new_user
+
+@app.get("/api/auth/verify-email")
+def verify_email(token: str, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.verification_token == token).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Token de verificación inválido o expirado.")
+    
+    user.email_verified = True
+    user.verification_token = None
+    db.commit()
+    return {"message": "Email verificado correctamente. Ya puedes iniciar sesión una vez que el administrador active tu cuenta."}
+
+@app.post("/api/auth/resend-verification")
+def resend_verification(email: str, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No existe un usuario con ese email.")
+    
+    if user.email_verified:
+        return {"message": "Este email ya está verificado."}
+
+    token = EmailService.generate_token()
+    user.verification_token = token
+    db.commit()
+    
+    email_service = EmailService(db)
+    email_sent = email_service.send_verification_email(user.email, token, user.full_name or user.username)
+    
+    if not email_sent:
+        raise HTTPException(status_code=500, detail="Error al enviar el correo. Contacte al administrador para revisar la configuración SMTP.")
+        
+    return {"message": "Cerrar exitoso. Se ha enviado un nuevo enlace de verificación a tu correo."}
 
 # --- USER MANAGEMENT (ADMIN ONLY) ---
 
@@ -157,6 +208,36 @@ def update_user(user_id: int, user_data: schemas.UserUpdate, db: Session = Depen
     db.commit()
     db.refresh(db_user)
     return db_user
+
+# --- CONFIGURATION (ADMIN ONLY) ---
+
+@app.get("/api/config/email")
+def get_email_config(db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
+    configs = db.query(models.Configuration).filter(models.Configuration.key.like("smtp_%")).all()
+    # Mask password
+    result = {c.key: c.value for c in configs}
+    if "smtp_password" in result:
+        result["smtp_password"] = "********"
+    return result
+
+@app.post("/api/config/email")
+def update_email_config(config_data: schemas.EmailConfigUpdate, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
+    data = config_data.dict()
+    for key, value in data.items():
+        if value is not None:
+            # Skip masked password if not provided
+            if key == "smtp_password" and value == "********":
+                continue
+            
+            db_config = db.query(models.Configuration).filter(models.Configuration.key == key).first()
+            if db_config:
+                db_config.value = str(value)
+            else:
+                db_config = models.Configuration(key=key, value=str(value))
+                db.add(db_config)
+    
+    db.commit()
+    return {"message": "Configuración de email actualizada con éxito"}
 
 @app.delete("/api/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
