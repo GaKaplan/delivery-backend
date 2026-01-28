@@ -29,14 +29,21 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_populate_db():
-    db = next(database.get_db())
-    # Create default admin if not exists
-    admin_user = db.query(models.User).filter(models.User.role == "admin").first()
-    if not admin_user:
-        hashed_pw = auth.get_password_hash("admin123")
-        new_admin = models.User(username="admin", hashed_password=hashed_pw, role="admin")
-        db.add(new_admin)
-        db.commit()
+    try:
+        db = next(database.get_db())
+        # Create default admin if not exists
+        admin_user = db.query(models.User).filter(models.User.role == "admin").first()
+        if not admin_user:
+            print("AUTH: Creando usuario admin inicial...")
+            hashed_pw = auth.get_password_hash("admin123")
+            new_admin = models.User(username="admin", hashed_password=hashed_pw, role="admin")
+            db.add(new_admin)
+            db.commit()
+            print("AUTH: Usuario admin creado exitosamente.")
+        else:
+            print("AUTH: Usuario admin ya existe. Saltando creación.")
+    except Exception as e:
+        print(f"DATABASE ERROR en startup: {e}")
 
 @app.get("/")
 async def root():
