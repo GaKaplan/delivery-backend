@@ -14,6 +14,7 @@ from services.parser import parse_pdf
 from services.geocoder import geocode_addresses
 from services.optimizer import optimize_route
 from services.email_service import EmailService
+from datetime import datetime, timedelta
 
 
 # Create database tables
@@ -163,6 +164,45 @@ def resend_verification(username: str, db: Session = Depends(database.get_db)):
         )
         
     return {"message": "Éxito. Se ha enviado un nuevo enlace de verificación a tu correo."}
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user:
+        # We don't want to reveal if an email exists for security, 
+        # but in this context (internal app) it's usually fine to be explicit.
+        # However, let's keep it safe.
+        return {"message": "Si el correo está registrado, recibirás un enlace de recuperación."}
+    
+    token = EmailService.generate_token()
+    user.reset_token = token
+    user.reset_token_expiry = datetime.utcnow() + timedelta(hours=1)
+    db.commit()
+    
+    email_service = EmailService(db)
+    success, error_msg = email_service.send_reset_password_email(user.email, token, user.full_name or user.username)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Error al enviar el correo: {error_msg}")
+        
+    return {"message": "Si el correo está registrado, recibirás un enlace de recuperación."}
+
+@app.post("/api/auth/reset-password")
+def reset_password(request: schemas.ResetPasswordRequest, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(
+        models.User.reset_token == request.token,
+        models.User.reset_token_expiry > datetime.utcnow()
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="El enlace de recuperación es inválido o ha expirado.")
+        
+    user.hashed_password = auth.get_password_hash(request.new_password)
+    user.reset_token = None
+    user.reset_token_expiry = None
+    db.commit()
+    
+    return {"message": "Contraseña actualizada correctamente. Ya puedes iniciar sesión."}
 
 # --- USER MANAGEMENT (ADMIN ONLY) ---
 

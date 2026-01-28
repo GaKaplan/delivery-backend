@@ -69,3 +69,10 @@ class EmailConfigUpdate(BaseModel):
     smtp_password: Optional[str] = None
     smtp_tls: bool = True
     frontend_url: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str

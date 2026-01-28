@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Enum, Boolean, DateTime
 from database import Base
 import enum
 
@@ -23,6 +23,10 @@ class User(Base):
     # Email Verification Fields (V3.1)
     email_verified = Column(Boolean, default=False, nullable=False)
     verification_token = Column(String(100), nullable=True)
+
+    # Password Reset Fields (V3.2)
+    reset_token = Column(String(100), nullable=True)
+    reset_token_expiry = Column(DateTime, nullable=True)
 
 class Configuration(Base):
     __tablename__ = "configurations"
