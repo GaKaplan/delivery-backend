@@ -36,7 +36,7 @@ class EmailService:
         if frontend_url.endswith("/"):
             frontend_url = frontend_url[:-1]
             
-        verify_link = f"{frontend_url}/verify-email?token={token}"
+        verify_link = f"{frontend_url}/#/verify-email?token={token}"
         
         msg = MIMEMultipart()
         msg['From'] = smtp_user
