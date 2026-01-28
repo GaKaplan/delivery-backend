@@ -220,7 +220,9 @@ def update_user(user_id: int, user_data: schemas.UserUpdate, db: Session = Depen
 
 @app.get("/api/config/email")
 def get_email_config(db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
-    configs = db.query(models.Configuration).filter(models.Configuration.key.like("smtp_%")).all()
+    configs = db.query(models.Configuration).filter(
+        (models.Configuration.key.like("smtp_%")) | (models.Configuration.key == "frontend_url")
+    ).all()
     # Mask password
     result = {c.key: c.value for c in configs}
     if "smtp_password" in result:

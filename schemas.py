@@ -68,3 +68,4 @@ class EmailConfigUpdate(BaseModel):
     smtp_user: str
     smtp_password: Optional[str] = None
     smtp_tls: bool = True
+    frontend_url: Optional[str] = None
