@@ -36,7 +36,14 @@ def startup_populate_db():
         if not admin_user:
             print("AUTH: Creando usuario admin inicial...")
             hashed_pw = auth.get_password_hash("admin123")
-            new_admin = models.User(username="admin", hashed_password=hashed_pw, role="admin")
+            new_admin = models.User(
+                username="admin", 
+                hashed_password=hashed_pw, 
+                role="admin",
+                full_name="Administrador Sistema",
+                email="admin@infotechlatam.com",
+                is_active=1 # Default admin is active
+            )
             db.add(new_admin)
             db.commit()
             print("AUTH: Usuario admin creado exitosamente.")
@@ -60,6 +67,12 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(database.get_d
             detail="Usuario o contraseña incorrectos",
         )
     
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta está pendiente de activación por un administrador.",
+        )
+    
     access_token = auth.create_access_token(data={"sub": user.username})
     return {
         "access_token": access_token, 
@@ -67,6 +80,31 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(database.get_d
         "username": user.username,
         "role": user.role
     }
+
+@app.post("/api/auth/register", response_model=schemas.User)
+def register(user_data: schemas.UserRegister, db: Session = Depends(database.get_db)):
+    db_user = db.query(models.User).filter(models.User.username == user_data.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso")
+    
+    db_email = db.query(models.User).filter(models.User.email == user_data.email).first()
+    if db_email:
+        raise HTTPException(status_code=400, detail="El email ya está registrado")
+
+    hashed_pw = auth.get_password_hash(user_data.password)
+    new_user = models.User(
+        username=user_data.username,
+        hashed_password=hashed_pw,
+        full_name=user_data.full_name,
+        email=user_data.email,
+        phone=user_data.phone,
+        role="user",
+        is_active=0 # Pending approval
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 # --- USER MANAGEMENT (ADMIN ONLY) ---
 
@@ -84,12 +122,41 @@ def create_user(user_data: schemas.UserCreate, db: Session = Depends(database.ge
     new_user = models.User(
         username=user_data.username,
         hashed_password=hashed_pw,
-        role=user_data.role
+        role=user_data.role,
+        full_name=user_data.full_name,
+        email=user_data.email,
+        phone=user_data.phone,
+        is_active=user_data.is_active
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
+
+@app.put("/api/users/{user_id}", response_model=schemas.User)
+def update_user(user_id: int, user_data: schemas.UserUpdate, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    if user_data.username and user_data.username != db_user.username:
+        # Check if new username is taken
+        other = db.query(models.User).filter(models.User.username == user_data.username).first()
+        if other: raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso")
+        db_user.username = user_data.username
+
+    if user_data.password:
+        db_user.hashed_password = auth.get_password_hash(user_data.password)
+    
+    if user_data.role: db_user.role = user_data.role
+    if user_data.full_name is not None: db_user.full_name = user_data.full_name
+    if user_data.email is not None: db_user.email = user_data.email
+    if user_data.phone is not None: db_user.phone = user_data.phone
+    if user_data.is_active is not None: db_user.is_active = user_data.is_active
+
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 @app.delete("/api/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.check_admin_role)):

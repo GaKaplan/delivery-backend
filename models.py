@@ -13,3 +13,10 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), default=UserRole.USER, nullable=False)
+    
+    # New Profile Fields (V3.0)
+    full_name = Column(String(100), nullable=True)
+    email = Column(String(100), unique=True, index=True, nullable=True)
+    phone = Column(String(20), nullable=True)
+    is_active = Column(Integer, default=0, nullable=False) # 0=Pending, 1=Active
+
