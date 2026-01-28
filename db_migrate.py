@@ -35,7 +35,9 @@ def migrate():
             ("phone", "VARCHAR(20)"),
             ("is_active", "INT DEFAULT 0"),
             ("email_verified", "BOOLEAN DEFAULT FALSE"),
-            ("verification_token", "VARCHAR(100)")
+            ("verification_token", "VARCHAR(100)"),
+            ("reset_token", "VARCHAR(100)"),
+            ("reset_token_expiry", "DATETIME")
         ]
         
         for col_name, col_type in columns:
