@@ -137,10 +137,10 @@ def verify_email(token: str, db: Session = Depends(database.get_db)):
     return {"message": "Email verificado correctamente. Ya puedes iniciar sesión una vez que el administrador active tu cuenta."}
 
 @app.post("/api/auth/resend-verification")
-def resend_verification(email: str, db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(models.User.email == email).first()
+def resend_verification(username: str, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
-        raise HTTPException(status_code=404, detail="No existe un usuario con ese email.")
+        raise HTTPException(status_code=404, detail="No existe un usuario con ese nombre.")
     
     if user.email_verified:
         return {"message": "Este email ya está verificado."}
